@@ -1,0 +1,13 @@
+[workspace]
+name = "{{PROJECT_NAME}}"
+bitbake = "2.8"
+yocto_release = "{{RELEASE}}"
+
+[[layers]]
+name = "{{LAYER_NAME}}"
+path = "{{LAYER_PATH}}"
+priority = 6
+
+[dependency.openembedded-core.meta]
+giturl = "https://git.openembedded.org/openembedded-core"
+branch = "{{RELEASE}}"
