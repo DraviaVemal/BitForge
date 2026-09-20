@@ -1,0 +1,25 @@
+trigger:
+  branches:
+    include:
+      - release
+  tags:
+    include:
+      - v*
+    exclude:
+      - v*-*
+
+pr:
+  branches:
+    include:
+      - release
+
+resources:
+  repositories:
+    - repository: pipelines
+      type: github
+      name: DraviaVemal/azure-pipeline
+      endpoint: github.com_DraviaVemal
+      ref: refs/heads/release
+
+extends:
+  template: oss/bitforge/pipeline.yml@pipelines

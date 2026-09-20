@@ -7,7 +7,7 @@ pub fn init() {
     let default_level = if cfg!(debug_assertions) {
         LevelFilter::Trace
     } else {
-        LevelFilter::Info
+        LevelFilter::Warn
     };
 
     env_logger::Builder::new()
@@ -42,9 +42,7 @@ pub(crate) fn format_timestamp() -> String {
     let minutes = (seconds_in_day % 3600) / 60;
     let seconds = seconds_in_day % 60;
     let (year, month, day) = civil_date_from_days(days_since_epoch as i64);
-    format!(
-        "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}Z")
 }
 
 fn civil_date_from_days(days_since_epoch: i64) -> (i64, u32, u32) {
