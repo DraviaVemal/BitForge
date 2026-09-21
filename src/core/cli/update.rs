@@ -139,7 +139,7 @@ fn asset_name() -> String {
     } else {
         "unknown"
     };
-    format!("bitforge-{os}-{arch}")
+    format!("BitForge-{os}-{arch}")
 }
 
 fn download(url: &str, destination: &Path) -> Result<()> {
