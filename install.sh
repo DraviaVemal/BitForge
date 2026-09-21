@@ -2,7 +2,7 @@
 set -eu
 
 REPO="${BITFORGE_REPO:-DraviaVemal/BitForge}"
-BIN_NAME="bitforge"
+BIN_NAME="BitForge"
 INSTALL_DIR="${BITFORGE_INSTALL_DIR:-$HOME/.local/bin}"
 USE_BETA=0
 
@@ -91,5 +91,5 @@ mv "$tmp" "$target"
 echo "Installed BitForge to $target"
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) echo "note: add $INSTALL_DIR to your PATH to run 'bitforge'." ;;
+  *) echo "note: add $INSTALL_DIR to your PATH to run 'BitForge'." ;;
 esac
