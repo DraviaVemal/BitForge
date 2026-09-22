@@ -22,6 +22,27 @@ pub struct AppArgs {
 }
 
 impl AppArgs {
+    /// Extracts `--log-level` from the raw process args before full parsing so
+    /// logging can be initialised at the requested verbosity.
+    pub fn peek_log_level() -> Option<String> {
+        let mut arguments = env::args();
+        arguments.next();
+        let arguments: Vec<String> = arguments.collect();
+        let mut index = 0;
+        while index < arguments.len() {
+            let Some(flag) = arguments[index].strip_prefix("--") else {
+                index += 1;
+                continue;
+            };
+            let (flag_name, inline_value) = split_flag(flag);
+            if flag_name == "log-level" {
+                return value_for(inline_value, &arguments, &mut index);
+            }
+            index += 1;
+        }
+        None
+    }
+
     pub fn parse() -> Self {
         let mut arguments: Vec<String> = env::args().collect();
         if !arguments.is_empty() {
@@ -92,6 +113,10 @@ impl AppArgs {
                 "add-layer" => add_layer_name = value_for(inline_value, &arguments, &mut index),
                 "remove-layer" => {
                     remove_layer_name = value_for(inline_value, &arguments, &mut index)
+                }
+                // Consumed earlier by peek_log_level; parsed here so it isn't flagged unknown.
+                "log-level" => {
+                    let _ = value_for(inline_value, &arguments, &mut index);
                 }
                 other => unknown.push(format!("--{other}")),
             }

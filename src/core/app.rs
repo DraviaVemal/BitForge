@@ -9,7 +9,7 @@ use crate::core::{self};
 
 pub async fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
     if args.version_requested {
-        info!("BitForge {VERSION}");
+        println!("BitForge {VERSION}");
         return Ok(());
     }
 
@@ -110,7 +110,7 @@ pub async fn run(args: AppArgs) -> Result<(), Box<dyn std::error::Error>> {
             .map(std::time::Duration::from_secs),
     };
     let server = web_server::spawn(args.working_directory.clone(), server_settings).await?;
-    info!("BitForge is running at {}", server.url());
+    println!("BitForge is running at {}", server.url());
 
     if let Some(target) = build_target {
         match server.start_build(target.clone()) {

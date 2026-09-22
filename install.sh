@@ -89,7 +89,39 @@ chmod +x "$tmp"
 mv "$tmp" "$target"
 
 echo "Installed BitForge to $target"
-case ":$PATH:" in
-  *":$INSTALL_DIR:"*) ;;
-  *) echo "note: add $INSTALL_DIR to your PATH to run 'BitForge'." ;;
-esac
+
+add_to_path() {
+  case ":$PATH:" in
+    *":$INSTALL_DIR:"*) return 0 ;;
+  esac
+
+  shell_name=$(basename "${SHELL:-/bin/sh}")
+  case "$shell_name" in
+    bash) rc="$HOME/.bashrc" ;;
+    zsh) rc="${ZDOTDIR:-$HOME}/.zshrc" ;;
+    ksh) rc="$HOME/.kshrc" ;;
+    fish)
+      rc="$HOME/.config/fish/config.fish"
+      mkdir -p "$(dirname "$rc")"
+      line="fish_add_path $INSTALL_DIR"
+      ;;
+    *) rc="$HOME/.profile" ;;
+  esac
+  [ -n "${line:-}" ] || line="export PATH=\"$INSTALL_DIR:\$PATH\""
+
+  touch "$rc" 2>/dev/null || {
+    echo "note: could not write to $rc; add $INSTALL_DIR to your PATH manually." >&2
+    return 0
+  }
+  if ! grep -qF "$line" "$rc" 2>/dev/null; then
+    printf '\n# Added by BitForge installer\n%s\n' "$line" >>"$rc" 2>/dev/null &&
+      echo "Added $INSTALL_DIR to PATH in $rc" ||
+      echo "note: could not update $rc; add $INSTALL_DIR to your PATH manually." >&2
+  fi
+
+  export PATH="$INSTALL_DIR:$PATH"
+  echo "note: run 'source $rc' or restart your shell to update PATH in existing sessions."
+}
+
+# PATH setup is best-effort; never fail the install over it.
+add_to_path || true
