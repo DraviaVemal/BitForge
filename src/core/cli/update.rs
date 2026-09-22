@@ -41,7 +41,7 @@ pub fn run_update(beta: bool) -> Result<()> {
 
     let latest = release.tag_name.trim_start_matches('v');
     if !is_newer(latest, SEMVER) {
-        log::info!("BitForge is already up to date ({VERSION})");
+        println!("BitForge is already up to date ({VERSION})");
         return Ok(());
     }
 
@@ -55,13 +55,13 @@ pub fn run_update(beta: bool) -> Result<()> {
     let current_exe = std::env::current_exe().context("cannot resolve current executable")?;
     let staging = current_exe.with_file_name(".bitforge-update.tmp");
 
-    log::info!("Downloading BitForge {latest}...");
+    println!("Downloading BitForge {latest}...");
     download(&asset.browser_download_url, &staging)?;
     make_executable(&staging)?;
     fs::rename(&staging, &current_exe)
         .with_context(|| format!("failed to replace {}", current_exe.display()))?;
 
-    log::info!("Updated BitForge {SEMVER} -> {latest}");
+    println!("Updated BitForge {SEMVER} -> {latest}");
     Ok(())
 }
 

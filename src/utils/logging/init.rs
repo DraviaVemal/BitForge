@@ -1,18 +1,26 @@
 use std::io::Write;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use log::LevelFilter;
 
-pub fn init() {
+pub fn init(level: Option<&str>) {
     let default_level = if cfg!(debug_assertions) {
         LevelFilter::Trace
     } else {
         LevelFilter::Warn
     };
+    let filter_level = level
+        .and_then(|value| LevelFilter::from_str(value.trim()).ok())
+        .unwrap_or(default_level);
 
-    env_logger::Builder::new()
-        .filter_level(default_level)
-        .parse_default_env()
+    let mut builder = env_logger::Builder::new();
+    builder.filter_level(filter_level);
+    // An explicit --log-level takes precedence over RUST_LOG.
+    if level.is_none() {
+        builder.parse_default_env();
+    }
+    builder
         .format(|buffer, record| {
             writeln!(
                 buffer,
