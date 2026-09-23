@@ -1,7 +1,13 @@
+use std::io::{IsTerminal, Write};
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, anyhow};
-use git2::{Direction, Object, Oid, Remote, Repository, Status, StatusOptions, build::CheckoutBuilder};
+use git2::{
+    Direction, FetchOptions, Object, Oid, Progress, Remote, RemoteCallbacks, Repository, Status,
+    StatusOptions, build::CheckoutBuilder, build::RepoBuilder,
+};
 
 #[derive(Debug, Clone)]
 pub enum GitRef {
@@ -115,7 +121,7 @@ impl GitHelper {
         let repo = if dest.join(".git").exists() {
             Repository::open(dest).with_context(|| format!("failed to open {}", dest.display()))?
         } else {
-            Repository::clone(url, dest)
+            clone_with_progress(url, dest)
                 .with_context(|| format!("failed to clone {url} into {}", dest.display()))?
         };
         Ok(Self { repo })
@@ -123,9 +129,25 @@ impl GitHelper {
 
     pub fn fetch(&self) -> Result<()> {
         if let Ok(mut remote) = self.repo.find_remote("origin") {
+            let show = std::io::stderr().is_terminal();
+            let progressed = Arc::new(AtomicBool::new(false));
+            let mut callbacks = RemoteCallbacks::new();
+            if show {
+                let flag = progressed.clone();
+                callbacks.transfer_progress(move |stats| {
+                    flag.store(true, Ordering::Relaxed);
+                    print_fetch_progress(&stats);
+                    true
+                });
+            }
+            let mut options = FetchOptions::new();
+            options.remote_callbacks(callbacks);
             remote
-                .fetch::<&str>(&[], None, None)
+                .fetch::<&str>(&[], Some(&mut options), None)
                 .context("git fetch failed")?;
+            if show && progressed.load(Ordering::Relaxed) {
+                eprintln!();
+            }
         }
         Ok(())
     }
@@ -210,4 +232,69 @@ impl GitHelper {
         };
         Ok(self.repo.find_object(oid, None)?)
     }
+}
+
+fn clone_with_progress(url: &str, dest: &Path) -> Result<Repository> {
+    let show = std::io::stderr().is_terminal();
+
+    let mut callbacks = RemoteCallbacks::new();
+    if show {
+        callbacks.transfer_progress(|stats| {
+            print_fetch_progress(&stats);
+            true
+        });
+    }
+    let mut fetch_options = FetchOptions::new();
+    fetch_options.remote_callbacks(callbacks);
+
+    let mut checkout = CheckoutBuilder::new();
+    if show {
+        checkout.progress(|_, current, total| print_checkout_progress(current, total));
+    }
+
+    let repo = RepoBuilder::new()
+        .fetch_options(fetch_options)
+        .with_checkout(checkout)
+        .clone(url, dest)?;
+    if show {
+        eprintln!();
+    }
+    Ok(repo)
+}
+
+fn print_fetch_progress(stats: &Progress) {
+    let total = stats.total_objects();
+    if total == 0 {
+        return;
+    }
+    let received = stats.received_objects();
+    let percent = received * 100 / total;
+    eprint!(
+        "\r  fetching: {percent:3}% ({received}/{total} objects, {})   ",
+        human_bytes(stats.received_bytes() as u64)
+    );
+    let _ = std::io::stderr().flush();
+}
+
+fn print_checkout_progress(current: usize, total: usize) {
+    if total == 0 {
+        return;
+    }
+    let percent = current * 100 / total;
+    eprint!("\r  checkout: {percent:3}% ({current}/{total} files)   ");
+    let _ = std::io::stderr().flush();
+}
+
+fn human_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{size:.1} {}", UNITS[unit])
 }

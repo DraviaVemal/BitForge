@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::convert::Infallible;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -102,15 +103,25 @@ struct TaskRecord {
     cancel: Option<Arc<AtomicBool>>,
 }
 
+/// Reason a task could not be started.
+enum BeginError {
+    /// An identical task is already running.
+    Running { id: u64, label: String },
+    /// The task has failed too many times and won't be retried automatically.
+    Blocked { message: String },
+}
+
 #[derive(Default)]
 struct TaskRegistry {
     next_id: u64,
     records: VecDeque<TaskRecord>,
+    failures: HashMap<String, u32>,
 }
 
 impl TaskRegistry {
     const HISTORY: usize = 200;
     const LOG_LINES: usize = 500;
+    const MAX_ATTEMPTS: u32 = 2;
 
     fn snapshot(&self) -> Vec<TaskEntry> {
         self.records.iter().rev().map(|record| record.entry.clone()).collect()
@@ -178,14 +189,34 @@ impl AppState {
         key: &str,
         cancel: Option<Arc<AtomicBool>>,
         force: bool,
-    ) -> Result<u64, (u64, String)> {
+    ) -> Result<u64, BeginError> {
+        if force {
+            // A manual retry clears the failure block for this key.
+            self.tasks.lock().unwrap().failures.remove(key);
+        } else if self.failed_too_often(key) {
+            return Err(BeginError::Blocked {
+                message: format!(
+                    "'{label}' failed {} times; not retrying automatically. Use refresh to try again.",
+                    TaskRegistry::MAX_ATTEMPTS
+                ),
+            });
+        }
         if let Some((id, existing)) = self.running_task_for_key(key) {
             if !force {
-                return Err((id, existing));
+                return Err(BeginError::Running { id, label: existing });
             }
             self.cancel_task(id);
         }
         Ok(self.begin_task(label, kind, key, cancel))
+    }
+
+    fn failed_too_often(&self, key: &str) -> bool {
+        self.tasks
+            .lock()
+            .unwrap()
+            .failures
+            .get(key)
+            .is_some_and(|count| *count >= TaskRegistry::MAX_ATTEMPTS)
     }
 
     fn end_task(&self, id: u64, status: &str) {
@@ -193,12 +224,24 @@ impl AppState {
         let mut log_text = None;
         {
             let mut registry = self.tasks.lock().unwrap();
+            let mut key = None;
             if let Some(record) = registry.records.iter_mut().find(|record| record.entry.id == id) {
                 record.entry.status = status.to_string();
                 record.entry.finished_at = Some(finished_at);
                 record.entry.cancellable = false;
                 record.cancel = None;
                 log_text = Some(record.log.iter().cloned().collect::<Vec<_>>().join("\n"));
+                if !record.key.is_empty() {
+                    key = Some(record.key.clone());
+                }
+            }
+            if let Some(key) = key {
+                match status {
+                    "failed" => *registry.failures.entry(key).or_insert(0) += 1,
+                    _ => {
+                        registry.failures.remove(&key);
+                    }
+                }
             }
         }
         if let Err(error) = crate::core::store::record_activity_finish(

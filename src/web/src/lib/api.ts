@@ -299,6 +299,7 @@ export const api = {
   tasks: () => getJson<TaskEntry[]>("/api/tasks"),
   task: (id: number) => getJson<TaskDetail>(`/api/tasks/${id}`),
   cancelTask: (id: number) => sendJson<{ cancelled: boolean }>(`/api/tasks/${id}/cancel`),
+  cancelAllTasks: () => sendJson<{ cancelled: number }>("/api/tasks/cancel-all"),
   deptree: (image?: string) =>
     getDedupe<DepTree>(`/api/deptree${image ? `?image=${encodeURIComponent(image)}` : ""}`),
   recipeTree: (image?: string, refresh = false) => {
