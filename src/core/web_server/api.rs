@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 use super::bitbake_build;
 use super::metadata;
-use super::{AppState, ResponseBody, ServerMessage, json, text, unix_now};
+use super::{AppState, BeginError, ResponseBody, ServerMessage, json, text, unix_now};
 use crate::core::cli::{
     BitForgeConfig, LockManager, run_dependency_add, run_dependency_delink, run_dependency_relink,
     run_dependency_remove,
@@ -43,6 +43,9 @@ pub(crate) async fn handle_domain(
     if method == &Method::POST {
         if let Some(task_id) = task_cancel_id(path) {
             return Some(post_task_cancel(state, task_id));
+        }
+        if path == "/api/tasks/cancel-all" {
+            return Some(post_tasks_cancel_all(state));
         }
     }
     match (method, path) {
@@ -341,6 +344,11 @@ fn post_task_cancel(state: &Arc<AppState>, id: u64) -> Response<ResponseBody> {
     json(StatusCode::OK, &json!({ "cancelled": cancelled }).to_string())
 }
 
+fn post_tasks_cancel_all(state: &Arc<AppState>) -> Response<ResponseBody> {
+    let cancelled = state.cancel_all_running_tasks();
+    json(StatusCode::OK, &json!({ "cancelled": cancelled }).to_string())
+}
+
 fn task_status<T>(cancel: &AtomicBool, result: &Result<T, anyhow::Error>) -> &'static str {
     if cancel.load(std::sync::atomic::Ordering::SeqCst) {
         "cancelled"
@@ -356,6 +364,15 @@ fn already_running(id: u64, label: String) -> Response<ResponseBody> {
         StatusCode::CONFLICT,
         &json!({ "running": true, "task_id": id, "label": label }).to_string(),
     )
+}
+
+fn begin_error_response(error: BeginError) -> Response<ResponseBody> {
+    match error {
+        BeginError::Running { id, label } => already_running(id, label),
+        BeginError::Blocked { message } => {
+            json(StatusCode::TOO_MANY_REQUESTS, &json!({ "error": message }).to_string())
+        }
+    }
 }
 
 const BUILD_ACTIVE_NOTE: &str =
@@ -572,7 +589,7 @@ async fn get_deptree(state: &Arc<AppState>, query: &str) -> Response<ResponseBod
         force,
     ) {
         Ok(id) => id,
-        Err((id, label)) => return already_running(id, label),
+        Err(error) => return begin_error_response(error),
     };
     let result =
         metadata::dependency_graph(state, task, &cancel, &state.working_directory, &image, refresh)
@@ -1041,7 +1058,7 @@ async fn get_metadata(state: &Arc<AppState>, query: &str) -> Response<ResponseBo
         force,
     ) {
         Ok(id) => id,
-        Err((id, label)) => return already_running(id, label),
+        Err(error) => return begin_error_response(error),
     };
     let result =
         metadata::project_metadata(state, task, &cancel, &state.working_directory, refresh).await;
@@ -1079,7 +1096,7 @@ async fn get_layout(state: &Arc<AppState>, query: &str) -> Response<ResponseBody
         force,
     ) {
         Ok(id) => id,
-        Err((id, label)) => return already_running(id, label),
+        Err(error) => return begin_error_response(error),
     };
     let result =
         metadata::image_layout(state, task, &cancel, &state.working_directory, &image, refresh)

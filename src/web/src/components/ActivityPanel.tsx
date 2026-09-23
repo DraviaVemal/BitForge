@@ -60,13 +60,43 @@ export default function ActivityPanel({ conn }: { conn: Connection }) {
     await api.cancelTask(id).catch(() => undefined);
   };
 
+  const cancelAll = async () => {
+    await api.cancelAllTasks().catch(() => undefined);
+  };
+
   const running = tasks.filter((task) => task.status === "running").length;
+  const hasCancellable = tasks.some(
+    (task) => task.status === "running" && task.cancellable,
+  );
 
   return (
     <aside className="activity">
       <div className="activity-head">
         <span className="head-label">Activity Pipeline</span>
         <span className="head-right">
+          {hasCancellable && (
+            <button
+              className="activity-kill-all"
+              onClick={cancelAll}
+              title="Cancel all running tasks"
+              aria-label="Cancel all running tasks"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M8 8l8 8M16 8l-8 8" />
+              </svg>
+            </button>
+          )}
           {running > 0 && <span className="running-pill">{running} running</span>}
           <span className={`conn-dot ${mode}`} title={`connection: ${mode}`} />
         </span>

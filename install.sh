@@ -84,7 +84,8 @@ mkdir -p "$INSTALL_DIR"
 target="$INSTALL_DIR/$BIN_NAME"
 tmp="$(mktemp)"
 echo "Downloading BitForge ${tag} ($asset)..."
-curl -fsSL -o "$tmp" "$url"
+# -# shows a progress bar; -S still surfaces errors on failure.
+curl -fSL --progress-bar -o "$tmp" "$url"
 chmod +x "$tmp"
 mv "$tmp" "$target"
 
